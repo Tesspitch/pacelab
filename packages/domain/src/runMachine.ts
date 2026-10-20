@@ -2,7 +2,7 @@ import {
   DEFAULT_COUNTDOWN_PREFERENCES,
   getCountdownNumber,
   validateCountdownPreferences,
-} from "./countdown.js";
+} from "./countdown";
 import type {
   ActiveRunStatus,
   CountdownPurpose,
@@ -11,7 +11,7 @@ import type {
   RunTransition,
   WorkoutRunEvent,
   WorkoutRunState,
-} from "./types.js";
+} from "./types";
 
 const MAX_AUDIO_CUE_LATENESS_MS = 1000;
 
@@ -729,6 +729,35 @@ export function abortWorkoutRun(
       ...advanced.events,
       { type: "WORKOUT_ABORTED", atMs: nowMs },
     ],
+  };
+}
+
+export function finishWorkoutRun(
+  state: WorkoutRunState,
+  nowMs: number,
+): RunTransition {
+  assertNotBeforeLastObservation(state, nowMs);
+  if (
+    state.status !== "PRESTART" &&
+    state.status !== "PAUSED" &&
+    !isActiveRunStatus(state.status)
+  ) {
+    throw new Error(`Cannot finish a workout in ${state.status} state.`);
+  }
+
+  const elapsedMs = getSessionElapsedMs(state, nowMs);
+  return {
+    state: {
+      ...state,
+      status: "COMPLETED",
+      stepStartedAtMs: null,
+      prestartStartedAtMs: null,
+      pausedAtMs: null,
+      pausedFromStatus: null,
+      finalElapsedMs: elapsedMs,
+      lastObservedAtMs: nowMs,
+    },
+    events: [{ type: "WORKOUT_COMPLETED", atMs: nowMs }],
   };
 }
 

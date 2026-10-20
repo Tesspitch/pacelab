@@ -2,8 +2,8 @@ import type {
   ExpandedWorkoutStep,
   WorkoutDefinition,
   WorkoutStepDefinition,
-} from "./types.js";
-import { assertValidWorkout } from "./validation.js";
+} from "./types";
+import { assertValidWorkout } from "./validation";
 
 function expandStep(
   step: WorkoutStepDefinition,

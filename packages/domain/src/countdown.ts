@@ -1,4 +1,4 @@
-import type { CountdownPreferences } from "./types.js";
+import type { CountdownPreferences } from "./types";
 
 export const DEFAULT_COUNTDOWN_PREFERENCES: CountdownPreferences = {
   durationSeconds: 5,

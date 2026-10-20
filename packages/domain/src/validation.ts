@@ -2,7 +2,7 @@ import type {
   PaceTargetRange,
   WorkoutDefinition,
   WorkoutStepDefinition,
-} from "./types.js";
+} from "./types";
 
 export interface ValidationIssue {
   readonly path: string;

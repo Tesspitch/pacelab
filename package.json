@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "workspaces": [
+    "apps/*",
     "packages/*"
   ],
   "engines": {
@@ -10,6 +11,8 @@
   },
   "scripts": {
     "test": "npm run test --workspace @pacelab/domain",
-    "typecheck": "npm run typecheck --workspace @pacelab/domain"
+    "typecheck": "npm run typecheck --workspace @pacelab/domain && npm run typecheck --workspace @pacelab/mobile",
+    "lint": "npm run lint --workspace @pacelab/mobile",
+    "android": "npm run android --workspace @pacelab/mobile"
   }
 }

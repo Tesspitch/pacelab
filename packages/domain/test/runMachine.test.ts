@@ -4,6 +4,7 @@ import {
   advanceWorkoutRun,
   createWorkoutRunState,
   expandWorkoutTimeline,
+  finishWorkoutRun,
   getSessionElapsedMs,
   pauseWorkoutRun,
   reportStepDistance,
@@ -463,5 +464,20 @@ describe("workout run state machine", () => {
     expect(aborted.state.status).toBe("ABORTED");
     expect(aborted.state.finalElapsedMs).toBe(2_000);
     expect(advanceWorkoutRun(aborted.state, 2_000).events).toHaveLength(0);
+  });
+
+  it("finishes early without fabricating completion of the active step", () => {
+    const started = startWorkoutRun(
+      createRun(
+        simpleWorkout({ type: "TIME", durationMs: 10_000 }),
+        noCountdowns,
+      ),
+      0,
+    );
+    const finished = finishWorkoutRun(started.state, 2_000);
+    expect(finished.state.status).toBe("COMPLETED");
+    expect(finished.state.finalElapsedMs).toBe(2_000);
+    expect(eventsOfType(finished.events, "STEP_COMPLETED")).toHaveLength(0);
+    expect(eventsOfType(finished.events, "WORKOUT_COMPLETED")).toHaveLength(1);
   });
 });
