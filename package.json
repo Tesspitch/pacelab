@@ -1,0 +1,15 @@
+{
+  "name": "pacelab",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "test": "npm run test --workspace @pacelab/domain",
+    "typecheck": "npm run typecheck --workspace @pacelab/domain"
+  }
+}
