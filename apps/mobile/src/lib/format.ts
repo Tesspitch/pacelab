@@ -20,3 +20,11 @@ export function formatStepGoal(step: ExpandedWorkoutStep): string {
 export function formatDistance(distanceM: number): string {
   return `${(distanceM / 1000).toFixed(2)} km`;
 }
+
+export function formatPaceSecondsPerKm(secondsPerKm: number | null): string {
+  if (secondsPerKm === null || !Number.isFinite(secondsPerKm) || secondsPerKm <= 0) return '--:--';
+  const totalSeconds = Math.round(secondsPerKm);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')} /km`;
+}

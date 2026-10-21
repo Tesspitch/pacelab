@@ -1,74 +1,50 @@
 import { useCallback, useEffect, useState } from 'react';
 import { router, useFocusEffect } from 'expo-router';
-import * as Location from 'expo-location';
-import { StyleSheet, Text, View } from 'react-native';
-
-import { ActionButton, BodyText, Eyebrow, RunScreen, ScreenTitle } from '@/components/run-ui';
-import { getCompletedSessionCount, initializeDatabase } from '@/lib/database';
-
-type LocationState = 'not-requested' | 'granted' | 'denied';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActionButton, Eyebrow, RunScreen } from '@/components/run-ui';
+import { useAppTheme } from '@/components/app-theme';
+import { getCompletedSessionCount, getInProgressSessions, getRecentCompletedSessions, initializeDatabase, type InProgressSession, type RecentSession } from '@/lib/database';
+import { formatDistance, formatMilliseconds } from '@/lib/format';
+import { supabase } from '@/lib/supabase';
+import { syncAuthenticatedData } from '@/lib/sync-service';
 
 export default function HomeScreen() {
-  const [databaseState, setDatabaseState] = useState('กำลังเตรียมฐานข้อมูล…');
+  const { mode } = useAppTheme();
+  const light = mode === 'light';
   const [completedCount, setCompletedCount] = useState(0);
-  const [locationState, setLocationState] = useState<LocationState>('not-requested');
-
-  const refreshCount = useCallback(() => {
-    void getCompletedSessionCount().then(setCompletedCount).catch(() => undefined);
-  }, []);
-
+  const [activeSessions, setActiveSessions] = useState<InProgressSession[]>([]);
+  const [recentSessions, setRecentSessions] = useState<RecentSession[]>([]);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   useEffect(() => {
-    void initializeDatabase()
-      .then(() => {
-        setDatabaseState('SQLite พร้อมใช้งานแบบออฟไลน์');
-        refreshCount();
-      })
-      .catch((error: unknown) => {
-        setDatabaseState(`เปิด SQLite ไม่สำเร็จ: ${error instanceof Error ? error.message : 'unknown error'}`);
-      });
-  }, [refreshCount]);
-
-  useFocusEffect(refreshCount);
-
-  const requestLocation = async () => {
-    const result = await Location.requestForegroundPermissionsAsync();
-    setLocationState(result.granted ? 'granted' : 'denied');
-  };
-
-  return (
-    <RunScreen>
-      <Eyebrow>PaceLab V6.4 · Offline first</Eyebrow>
-      <ScreenTitle>วิ่งได้โดยไม่ต้องมีนาฬิกา</ScreenTitle>
-      <BodyText>เลือก Free Run เพื่อเริ่มทันที หรือดูแผน Speedwork แบบเต็มก่อนเริ่ม ทุกเวลาอ้างอิง monotonic clock ไม่ใช่การนับ tick สะสม</BodyText>
-      <View style={styles.statusCard}>
-        <Text style={styles.statusTitle}>สถานะเครื่อง</Text>
-        <Text style={styles.statusText}>{databaseState}</Text>
-        <Text style={styles.statusText}>กิจกรรมที่บันทึกจบแล้ว: {completedCount}</Text>
-        <Text style={styles.statusText}>Location: {locationState}</Text>
-        <ActionButton label="ตรวจสิทธิ์ตำแหน่งขณะใช้แอป" tone="secondary" onPress={() => void requestLocation()} />
-      </View>
-      <View style={styles.modeCard}>
-        <Text style={styles.modeKicker}>FREE RUN</Text>
-        <Text style={styles.modeTitle}>เริ่มวิ่งอิสระ</Text>
-        <Text style={styles.modeBody}>เวลา · ระยะทาง · current pace โดยค่าที่ GPS ยังไม่พร้อมจะแสดงเป็น —</Text>
-        <ActionButton label="Start Free Run" onPress={() => router.push('/free-run')} />
-      </View>
-      <View style={styles.modeCard}>
-        <Text style={styles.modeKicker}>SPEEDWORK</Text>
-        <Text style={styles.modeTitle}>6 × 3:00 / พัก 2:00</Text>
-        <Text style={styles.modeBody}>วอร์ม 10 นาที · Work 6 เซต · Recovery 5 ครั้ง · คูลดาวน์ 10 นาที</Text>
-        <ActionButton label="ดู Timeline 48:00" tone="secondary" onPress={() => router.push('/workout-preview')} />
-      </View>
-    </RunScreen>
-  );
+    if (!supabase) return;
+    void supabase.auth.getSession().then(({ data }) => setAvatarUrl((data.session?.user.user_metadata?.avatar_url as string | undefined) ?? null));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => setAvatarUrl((session?.user.user_metadata?.avatar_url as string | undefined) ?? null));
+    return () => listener.subscription.unsubscribe();
+  }, []);
+  const refresh = useCallback(() => { void Promise.all([getCompletedSessionCount(), getInProgressSessions(), getRecentCompletedSessions(3)]).then(([count, sessions, recent]) => { setCompletedCount(count); setActiveSessions(sessions); setRecentSessions(recent); }).catch(() => undefined); }, []);
+  useEffect(() => { void initializeDatabase().then(refresh).catch(() => undefined); }, [refresh]);
+  useFocusEffect(refresh);
+  useEffect(() => { void syncAuthenticatedData().then(refresh).catch(() => undefined); }, [refresh]);
+  const active = activeSessions[0];
+  const openProfile = async () => { const session = await supabase?.auth.getSession(); router.push(session?.data.session ? '/profile' as never : '/login' as never); };
+  const avatarSource = avatarUrl ?? 'https://ui-avatars.com/api/?name=PaceLab&background=43C7B5&color=172434&size=96&bold=true';
+  return <RunScreen>
+    <View style={styles.topbar}><Eyebrow>PACELAB · RUN BETTER</Eyebrow><Pressable style={styles.avatar} onPress={() => void openProfile()}><Image source={{ uri: avatarSource }} onError={() => setAvatarUrl(null)} style={styles.avatarImage} /></Pressable></View>
+    {active && <View style={[styles.resumeCard, light && lightStyles.panel]}><View style={styles.row}><View><Text style={[styles.kicker, light && lightStyles.kicker]}>กำลังวิ่งอยู่</Text><Text style={[styles.resumeTitle, light && lightStyles.title]}>{active.mode === 'free_run' ? 'Run' : 'Interval'}</Text></View><Text style={styles.liveDot}>● LIVE</Text></View><Text style={[styles.resumeMeta, light && lightStyles.meta]}>{active.status === 'paused' ? 'พักอยู่' : 'กำลังจับเวลา'} · {Math.round(active.distanceM)} ม.</Text><ActionButton label="กลับไปวิ่งต่อ" onPress={() => router.push({ pathname: active.mode === 'free_run' ? '/free-run' : '/interval-run', params: { sessionId: active.id } })} /></View>}
+    <View style={[styles.hero, light && lightStyles.hero]}><Text style={[styles.heroKicker, light && lightStyles.heroKicker]}>TODAY&apos;S MISSION</Text><Text style={[styles.heroTitle, light && lightStyles.title]}>Run with intent.</Text><View style={[styles.missionLine, light && lightStyles.divider]}><Text style={styles.missionValue}>{completedCount}</Text><Text style={[styles.missionText, light && lightStyles.meta]}>ACTIVITIES</Text></View></View>
+    <View style={styles.stats}><View style={[styles.stat, light && lightStyles.panel]}><Text style={[styles.statValue, light && lightStyles.title]}>{completedCount}</Text><Text style={[styles.statLabel, light && lightStyles.meta]}>กิจกรรมทั้งหมด</Text></View><View style={[styles.stat, light && lightStyles.panel]}><Text style={[styles.statValue, light && lightStyles.title]}>—</Text><Text style={[styles.statLabel, light && lightStyles.meta]}>กม. สัปดาห์นี้</Text></View><View style={[styles.stat, light && lightStyles.panel]}><Text style={[styles.statValue, light && lightStyles.title]}>—</Text><Text style={[styles.statLabel, light && lightStyles.meta]}>pace เฉลี่ย</Text></View></View>
+    <View style={styles.sectionHeader}><Text style={[styles.sectionTitle, light && lightStyles.title]}>ซ้อมตามแผน</Text><Text style={styles.sectionLink}>ดูทั้งหมด</Text></View>
+    <View style={[styles.workoutRow, light && lightStyles.panel]}><View style={[styles.workoutIcon, light && lightStyles.iconPanel]}><Text style={styles.iconText}>↗</Text></View><View style={styles.workoutInfo}><Text style={[styles.workoutTitle, light && lightStyles.title]}>สร้าง Interval</Text></View><ActionButton label="สร้าง" tone="secondary" onPress={() => router.push('/workout-builder')} /></View>
+    <View style={styles.sectionHeader}><Text style={[styles.sectionTitle, light && lightStyles.title]}>ประวัติการวิ่งล่าสุด</Text><Text style={styles.sectionLink} onPress={() => router.push('/history')}>ดูทั้งหมด</Text></View>
+    <View style={[styles.historyCard, light && lightStyles.panel]}>{recentSessions.length === 0 ? <Text style={[styles.emptyText, light && lightStyles.meta]}>ยังไม่มีประวัติ</Text> : recentSessions.map((session) => <Pressable key={session.id} style={[styles.historyRow, light && lightStyles.divider]} onPress={() => router.push({ pathname: '/activity/[id]', params: { id: session.id } })}><View style={[styles.historyIcon, light && lightStyles.iconPanel]}><Text style={styles.historyIconText}>↗</Text></View><View style={styles.historyInfo}><Text style={[styles.historyTitle, light && lightStyles.title]}>{session.mode === 'free_run' ? 'Run' : 'Interval'}</Text><Text style={[styles.historyMeta, light && lightStyles.meta]}>{new Date(session.startedAt).toLocaleDateString('th-TH')} · {formatMilliseconds(session.elapsedMs)}</Text></View><Text style={styles.historyDistance}>{formatDistance(session.distanceM)}</Text></Pressable>)}</View>
+  </RunScreen>;
 }
-
 const styles = StyleSheet.create({
-  statusCard: { gap: 10, borderRadius: 18, borderColor: '#24304A', borderWidth: 1, padding: 16 },
-  statusTitle: { color: '#F8FAFC', fontSize: 18, fontWeight: '800' },
-  statusText: { color: '#91A3BA', fontSize: 14 },
-  modeCard: { gap: 12, borderRadius: 24, backgroundColor: '#11182A', padding: 22 },
-  modeKicker: { color: '#5EEAD4', fontSize: 12, fontWeight: '900', letterSpacing: 1.2 },
-  modeTitle: { color: '#FFFFFF', fontSize: 25, fontWeight: '900' },
-  modeBody: { color: '#9AA9BD', fontSize: 15, lineHeight: 22 },
+  topbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }, avatar: { width: 44, height: 44, borderRadius: 22, overflow: 'hidden', backgroundColor: '#43C7B5', alignItems: 'center', justifyContent: 'center' }, avatarImage: { width: '100%', height: '100%' }, avatarText: { color: '#14202B', fontWeight: '900', fontSize: 18 },
+  hero: { gap: 12, borderRadius: 4, backgroundColor: '#101923', borderLeftColor: '#C6FF29', borderLeftWidth: 5, padding: 24 }, heroKicker: { color: '#C6FF29', fontSize: 13, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1.4 }, heroTitle: { color: '#FFFFFF', fontSize: 42, fontWeight: '900', letterSpacing: -1.5 }, missionLine: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6, borderTopColor: '#294052', borderTopWidth: 1, paddingTop: 12 }, missionValue: { color: '#35C8FF', fontSize: 28, fontWeight: '900' }, missionText: { color: '#8FA5BC', fontSize: 13, fontWeight: '800', letterSpacing: 1 },
+  resumeCard: { gap: 10, borderRadius: 4, backgroundColor: '#101923', borderLeftColor: '#C6FF29', borderLeftWidth: 4, padding: 18 }, row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }, kicker: { color: '#C6FF29', fontSize: 12, fontWeight: '900', letterSpacing: 1 }, resumeTitle: { color: '#F7FBFF', fontSize: 25, fontWeight: '900' }, resumeMeta: { color: '#9FB2C7', fontSize: 15 }, liveDot: { color: '#FF5D68', fontWeight: '900', fontSize: 12 },
+  stats: { flexDirection: 'row', gap: 9 }, stat: { flex: 1, backgroundColor: '#101923', borderRadius: 3, borderTopColor: '#35C8FF', borderTopWidth: 3, padding: 14, gap: 5 }, statValue: { color: '#F7FBFF', fontSize: 24, fontWeight: '900' }, statLabel: { color: '#8FA5BC', fontSize: 12 }, sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }, sectionTitle: { color: '#F7FBFF', fontSize: 20, fontWeight: '900', letterSpacing: -0.3 }, sectionLink: { color: '#35C8FF', fontSize: 14, fontWeight: '900' },
+  workoutRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#101923', borderLeftColor: '#26BFFF', borderLeftWidth: 4, borderRadius: 4, padding: 15 }, workoutIcon: { width: 46, height: 46, borderRadius: 3, backgroundColor: '#173044', alignItems: 'center', justifyContent: 'center' }, iconText: { color: '#35C8FF', fontSize: 25, fontWeight: '900' }, workoutInfo: { flex: 1 }, workoutTitle: { color: '#F7FBFF', fontSize: 17, fontWeight: '900' }, status: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#101923', borderRadius: 4, padding: 15 }, statusDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#C6FF29' }, statusTitle: { color: '#F7FBFF', fontWeight: '800' }, statusText: { color: '#8FA5BC', marginTop: 3 }, nav: { flexDirection: 'row', justifyContent: 'space-around', backgroundColor: '#101923', borderRadius: 4, borderTopColor: '#26394A', borderTopWidth: 1, paddingVertical: 16, marginTop: 4 }, navActive: { color: '#35C8FF', fontWeight: '900' }, navItem: { color: '#8FA5BC', fontWeight: '700' },
+  historyCard: { gap: 4, backgroundColor: '#101923', borderRadius: 4, paddingHorizontal: 14 }, historyRow: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomColor: '#223344', borderBottomWidth: 1 }, historyIcon: { width: 38, height: 38, borderRadius: 3, backgroundColor: '#173044', alignItems: 'center', justifyContent: 'center' }, historyIconText: { color: '#35C8FF', fontSize: 20, fontWeight: '900' }, historyInfo: { flex: 1, gap: 3 }, historyTitle: { color: '#F7FBFF', fontWeight: '900', fontSize: 15 }, historyMeta: { color: '#8FA5BC', fontSize: 12 }, historyDistance: { color: '#35C8FF', fontWeight: '900', fontSize: 15 }, emptyText: { color: '#8FA5BC', paddingVertical: 18 },
 });
+const lightStyles = StyleSheet.create({ panel: { backgroundColor: '#FFFFFF', borderColor: '#E1E6EB', borderWidth: 1, borderRadius: 0, shadowColor: '#263547', shadowOpacity: .05, shadowRadius: 12, elevation: 1 }, hero: { backgroundColor: '#E7F4F1', borderLeftColor: '#43C7B5', borderRadius: 0 }, heroKicker: { color: '#299F92' }, title: { color: '#191D23' }, meta: { color: '#667282' }, kicker: { color: '#299F92' }, iconPanel: { backgroundColor: '#E5F5F2' }, divider: { borderBottomColor: '#E6EBEF' }, sectionLink: { color: '#299F92' }, historyDistance: { color: '#299F92' }, statusDot: { backgroundColor: '#43C7B5' } });

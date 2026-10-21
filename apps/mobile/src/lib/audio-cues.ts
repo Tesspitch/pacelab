@@ -1,6 +1,8 @@
 import * as Speech from 'expo-speech';
 
-import type { WorkoutRunEvent } from '@pacelab/domain';
+import type { CompletedKilometerLap, WorkoutRunEvent } from '@pacelab/domain';
+
+import { formatMilliseconds, formatPaceSecondsPerKm } from '@/lib/format';
 
 type QueuedCue = { key: string; text: string };
 
@@ -94,3 +96,10 @@ class WorkoutCueQueue {
 }
 
 export const workoutCueQueue = new WorkoutCueQueue();
+
+export function speakFreeRunLap(lap: CompletedKilometerLap, totalElapsedMs: number): void {
+  Speech.speak(
+    `Kilometer ${lap.lapIndex}. Lap pace ${formatPaceSecondsPerKm(lap.averagePaceSecondsPerKm)}. Total time ${formatMilliseconds(totalElapsedMs)}.`,
+    { language: 'en-US', rate: 0.95 },
+  );
+}

@@ -14,5 +14,9 @@
     "typecheck": "npm run typecheck --workspace @pacelab/domain && npm run typecheck --workspace @pacelab/mobile",
     "lint": "npm run lint --workspace @pacelab/mobile",
     "android": "npm run android --workspace @pacelab/mobile"
+  },
+  "dependencies": {
+    "@maplibre/maplibre-react-native": "^11.5.0",
+    "@supabase/supabase-js": "^2.118.0"
   }
 }

@@ -5,8 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "pacelab",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "ios": {
       "icon": "./assets/expo.icon",
       "bundleIdentifier": "com.pacelab.app"
@@ -32,7 +31,11 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "PaceLab uses your location to record run distance and pace."
+          "locationWhenInUsePermission": "PaceLab uses your location to record run distance, pace, and route while a run is active.",
+          "locationAlwaysAndWhenInUsePermission": "PaceLab uses your location during an active run when the screen is locked or the app is in the background.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true,
+          "isIosBackgroundLocationEnabled": true
         }
       ],
       [
@@ -46,11 +49,12 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#F1F4F8",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,

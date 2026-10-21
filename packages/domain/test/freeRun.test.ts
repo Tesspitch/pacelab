@@ -5,6 +5,7 @@ import {
   getFreeRunElapsedMs,
   pauseFreeRun,
   resumeFreeRun,
+  restoreFreeRun,
   startFreeRun,
 } from "../src/index.js";
 
@@ -30,5 +31,11 @@ describe("Free Run state machine", () => {
     expect(() => startFreeRun(started, 10_000)).toThrow(
       "Cannot start a Free Run",
     );
+  });
+
+  it("restores elapsed time after leaving the running screen", () => {
+    const restored = restoreFreeRun("ACTIVE", 12_500, 50_000);
+    expect(getFreeRunElapsedMs(restored, 50_000)).toBe(12_500);
+    expect(restored.status).toBe("ACTIVE");
   });
 });

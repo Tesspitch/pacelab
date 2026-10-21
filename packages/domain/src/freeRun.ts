@@ -33,6 +33,24 @@ export function createFreeRunState(): FreeRunState {
   };
 }
 
+/** Rehydrates a persisted run after navigation or an app restart. */
+export function restoreFreeRun(
+  status: Extract<FreeRunStatus, "ACTIVE" | "PAUSED">,
+  elapsedMs: number,
+  nowMs: number,
+): FreeRunState {
+  assertTimestamp(nowMs);
+  const safeElapsed = Math.max(0, Number.isFinite(elapsedMs) ? elapsedMs : 0);
+  return {
+    status,
+    activeStartedAtMs: nowMs - safeElapsed,
+    pausedAtMs: status === "PAUSED" ? nowMs : null,
+    totalPausedMs: 0,
+    finalElapsedMs: null,
+    lastObservedAtMs: nowMs,
+  };
+}
+
 export function startFreeRun(state: FreeRunState, nowMs: number): FreeRunState {
   assertMonotonic(state, nowMs);
   if (state.status !== "READY") {

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { router } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import {
   advanceWorkoutRun,
   createWorkoutRunState,
+  createGpsTrackerState,
   finishWorkoutRun,
   getSessionElapsedMs,
   pauseWorkoutRun,
@@ -11,12 +12,23 @@ import {
   startWorkoutRun,
   type WorkoutRunEvent,
   type WorkoutRunState,
+  type GpsTrackerState,
+  type WorkoutDefinition,
+  expandWorkoutTimeline,
 } from '@pacelab/domain';
 
 import { ActionButton, BodyText, ButtonRow, Eyebrow, Metric, RunScreen, ScreenTitle } from '@/components/run-ui';
 import { workoutCueQueue } from '@/lib/audio-cues';
-import { createLocalSession, finishLocalSession, recordSessionEvent, setSessionPaused } from '@/lib/database';
-import { formatMilliseconds } from '@/lib/format';
+import { createLocalSession, finishLocalSession, getSessionGpsTracker, recordSessionEvent, recordSessionStepResult, setSessionPaused } from '@/lib/database';
+import { formatDistance, formatMilliseconds } from '@/lib/format';
+import {
+  getLocationPermissionSnapshot,
+  requestForegroundLocationPermission,
+  startBackgroundLocationTracking,
+  startForegroundLocationTracking,
+  stopBackgroundLocationTracking,
+  type LocationTrackingSubscription,
+} from '@/lib/location-service';
 import { sampleTimeline, sampleWorkout } from '@/lib/sample-workout';
 
 function remainingMs(state: WorkoutRunState, nowMs: number): number {
@@ -30,12 +42,93 @@ function remainingMs(state: WorkoutRunState, nowMs: number): number {
 }
 
 export default function IntervalRunScreen() {
-  const [run, setRun] = useState(() => createWorkoutRunState(sampleTimeline));
+  const params = useLocalSearchParams<{ workout?: string }>();
+  const workout = (() => { try { return typeof params.workout === 'string' ? JSON.parse(params.workout) as WorkoutDefinition : sampleWorkout; } catch { return sampleWorkout; } })();
+  const timeline = workout === sampleWorkout ? sampleTimeline : expandWorkoutTimeline(workout);
+  const [run, setRun] = useState(() => createWorkoutRunState(timeline));
   const [clockMs, setClockMs] = useState(() => performance.now());
   const [message, setMessage] = useState('Countdown และ transition cues พร้อมทำงาน');
+  const [gps, setGps] = useState<GpsTrackerState>(createGpsTrackerState);
+  const [stepStartedDistanceM, setStepStartedDistanceM] = useState(0);
   const sessionId = useRef<string | null>(null);
   const eventSequence = useRef(0);
   const persistedCompletion = useRef(false);
+  const gpsRef = useRef(gps);
+  const stepStartDistanceM = useRef(0);
+  const foregroundSubscription = useRef<LocationTrackingSubscription | null>(null);
+  const backgroundRunning = useRef(false);
+  const pollingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const applyGpsState = (next: GpsTrackerState) => {
+    gpsRef.current = next;
+    setGps(next);
+  };
+
+  const stopGps = async () => {
+    await foregroundSubscription.current?.stop();
+    foregroundSubscription.current = null;
+    if (backgroundRunning.current) await stopBackgroundLocationTracking();
+    backgroundRunning.current = false;
+    if (pollingTimer.current) clearInterval(pollingTimer.current);
+    pollingTimer.current = null;
+  };
+
+  const startGps = async (id: string) => {
+    let permission = await getLocationPermissionSnapshot();
+    if (!permission.servicesEnabled) {
+      setMessage('GPS ปิดอยู่ · workout แบบจับเวลายังทำงานต่อ');
+      return;
+    }
+    if (permission.foreground !== 'granted') {
+      await requestForegroundLocationPermission();
+      permission = await getLocationPermissionSnapshot();
+    }
+    if (permission.foreground !== 'granted') {
+      setMessage('ไม่ได้รับสิทธิ์ GPS · workout แบบจับเวลายังทำงานต่อ');
+      return;
+    }
+    if (permission.background === 'granted') {
+      await startBackgroundLocationTracking(id);
+      backgroundRunning.current = true;
+      pollingTimer.current = setInterval(() => {
+        void getSessionGpsTracker(id).then(applyGpsState);
+      }, 1000);
+      return;
+    }
+    foregroundSubscription.current = await startForegroundLocationTracking(
+      id,
+      (result) => applyGpsState(result.state),
+      (error) => setMessage(`GPS ขัดข้อง: ${error} · workout ยังทำงานต่อ`),
+    );
+  };
+
+  useEffect(() => () => { void stopGps(); }, []);
+
+  const enrichAndPersistStepEvents = (events: readonly WorkoutRunEvent[]): readonly WorkoutRunEvent[] => {
+    const currentDistanceM = gpsRef.current.cumulativeDistanceM;
+    const enriched = events.map((event): WorkoutRunEvent => {
+      if (event.type !== 'STEP_COMPLETED') return event;
+      const actualDistanceM = Math.max(0, currentDistanceM - stepStartDistanceM.current);
+      if (sessionId.current) {
+        void recordSessionStepResult({
+          sessionId: sessionId.current,
+          stepExecutionId: event.step.executionId,
+          stepOrder: event.step.sequence,
+          stepKind: event.step.kind,
+          setNumber: event.step.repetition,
+          elapsedMs: event.actualElapsedMs,
+          distanceM: gpsRef.current.lastAcceptedPoint ? actualDistanceM : null,
+          completionStatus: 'completed',
+        });
+      }
+      return { ...event, actualDistanceM: gpsRef.current.lastAcceptedPoint ? actualDistanceM : null };
+    });
+    if (events.some((event) => event.type === 'STEP_STARTED')) {
+      stepStartDistanceM.current = currentDistanceM;
+      setStepStartedDistanceM(currentDistanceM);
+    }
+    return enriched;
+  };
 
   const recordAction = (type: string, elapsedMs: number, events: readonly WorkoutRunEvent[] = []) => {
     if (!sessionId.current) return;
@@ -52,7 +145,11 @@ export default function IntervalRunScreen() {
   const persistCompletion = (state: WorkoutRunState) => {
     if (!sessionId.current || persistedCompletion.current || state.status !== 'COMPLETED') return;
     persistedCompletion.current = true;
-    void finishLocalSession({ sessionId: sessionId.current, elapsedMs: state.finalElapsedMs ?? 0 })
+    void stopGps().then(() => finishLocalSession({
+      sessionId: sessionId.current!,
+      elapsedMs: state.finalElapsedMs ?? 0,
+      distanceM: gpsRef.current.cumulativeDistanceM,
+    }))
       .then(() => setMessage('Workout เสร็จและบันทึกลง SQLite แล้ว'))
       .catch((error: unknown) => setMessage(`บันทึกไม่สำเร็จ: ${error instanceof Error ? error.message : 'unknown error'}`));
   };
@@ -65,22 +162,26 @@ export default function IntervalRunScreen() {
       setClockMs(now);
       setRun((current) => {
         const transition = advanceWorkoutRun(current, now);
-        workoutCueQueue.enqueue(transition.events);
-        if (transition.events.length > 0) {
-          recordAction('domain_transition', getSessionElapsedMs(transition.state, now), transition.events);
+        const events = enrichAndPersistStepEvents(transition.events);
+        workoutCueQueue.enqueue(events);
+        if (events.length > 0) {
+          recordAction('domain_transition', getSessionElapsedMs(transition.state, now), events);
         }
         persistCompletion(transition.state);
         return transition.state;
       });
     }, 200);
     return () => clearInterval(timer);
+    // The interval is intentionally recreated only when the run status changes.
+    // Domain callbacks use refs/current render state and must not restart the clock.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [run.status]);
 
   useEffect(() => () => workoutCueQueue.cancelPending(), []);
 
   const start = async () => {
     try {
-      sessionId.current = await createLocalSession({ mode: 'speedwork', workoutSnapshot: sampleWorkout });
+      sessionId.current = await createLocalSession({ mode: 'speedwork', workoutSnapshot: workout });
       workoutCueQueue.reset();
       const now = performance.now();
       const transition = startWorkoutRun(run, now);
@@ -88,6 +189,7 @@ export default function IntervalRunScreen() {
       setRun(transition.state);
       workoutCueQueue.enqueue(transition.events);
       recordAction('start', 0, transition.events);
+      await startGps(sessionId.current);
     } catch (error) {
       setMessage(`เริ่มไม่ได้: ${error instanceof Error ? error.message : 'unknown error'}`);
     }
@@ -101,6 +203,7 @@ export default function IntervalRunScreen() {
     setClockMs(now);
     recordAction('pause', getSessionElapsedMs(transition.state, now), transition.events);
     if (sessionId.current) void setSessionPaused(sessionId.current, true);
+    void stopGps();
   };
 
   const resume = () => {
@@ -111,10 +214,27 @@ export default function IntervalRunScreen() {
     workoutCueQueue.enqueue(transition.events);
     recordAction('resume', getSessionElapsedMs(transition.state, now), transition.events);
     if (sessionId.current) void setSessionPaused(sessionId.current, false);
+    if (sessionId.current) void startGps(sessionId.current);
   };
 
   const finish = () => {
     const now = performance.now();
+    const activeStep = run.timeline[run.stepIndex];
+    if (sessionId.current && activeStep && run.stepStartedAtMs !== null) {
+      const effectiveNow = run.status === 'PAUSED' && run.pausedAtMs !== null ? run.pausedAtMs : now;
+      void recordSessionStepResult({
+        sessionId: sessionId.current,
+        stepExecutionId: activeStep.executionId,
+        stepOrder: activeStep.sequence,
+        stepKind: activeStep.kind,
+        setNumber: activeStep.repetition,
+        elapsedMs: Math.max(0, effectiveNow - run.stepStartedAtMs),
+        distanceM: gpsRef.current.lastAcceptedPoint
+          ? Math.max(0, gpsRef.current.cumulativeDistanceM - stepStartDistanceM.current)
+          : null,
+        completionStatus: 'partial',
+      });
+    }
     const transition = finishWorkoutRun(run, now);
     workoutCueQueue.cancelPending();
     setRun(transition.state);
@@ -122,6 +242,11 @@ export default function IntervalRunScreen() {
     recordAction('finish_early', transition.state.finalElapsedMs ?? 0, transition.events);
     persistCompletion(transition.state);
   };
+
+  const confirmFinish = () => Alert.alert('จบ Workout?', 'ระบบจะบันทึกผลของช่วงที่ทำไปแล้ว', [
+    { text: 'ยกเลิก', style: 'cancel' },
+    { text: 'จบและบันทึก', style: 'destructive', onPress: finish },
+  ]);
 
   const currentStep = run.timeline[run.stepIndex];
   const stateLabel = run.status === 'PRESTART' ? 'GET READY' : currentStep?.kind ?? run.status;
@@ -134,13 +259,13 @@ export default function IntervalRunScreen() {
       <ScreenTitle>{run.status === 'PAUSED' ? 'หยุดพัก' : 'Speedwork'}</ScreenTitle>
       <Metric label={run.status === 'PRESTART' ? 'Start in' : 'Set remaining'} value={formatMilliseconds(remainingMs(run, clockMs))} hero />
       <View style={styles.metrics}>
-        <Metric label="Set distance" value="— km" />
+        <Metric label="Set distance" value={gps.lastAcceptedPoint ? formatDistance(Math.max(0, gps.cumulativeDistanceM - stepStartedDistanceM)) : '— km'} />
         <Metric label="Session elapsed" value={formatMilliseconds(elapsedMs)} />
       </View>
       <BodyText>{message}</BodyText>
-      {run.status === 'READY' && <ActionButton label="เริ่ม Countdown 5 วินาที" onPress={() => void start()} />}
-      {(run.status === 'PRESTART' || run.status.startsWith('ACTIVE_')) && <ButtonRow><ActionButton label="พัก" tone="secondary" onPress={pause} /><ActionButton label="จบก่อนกำหนด" tone="danger" onPress={finish} /></ButtonRow>}
-      {run.status === 'PAUSED' && <ButtonRow><ActionButton label="ทำต่อ" onPress={resume} /><ActionButton label="จบก่อนกำหนด" tone="danger" onPress={finish} /></ButtonRow>}
+      {run.status === 'READY' && <ActionButton label="เริ่มวิ่ง" onPress={() => void start()} />}
+      {(run.status === 'PRESTART' || run.status.startsWith('ACTIVE_')) && <ButtonRow><ActionButton label="พัก" tone="secondary" onPress={pause} /><ActionButton label="จบก่อนกำหนด" tone="danger" onPress={confirmFinish} /></ButtonRow>}
+      {run.status === 'PAUSED' && <ButtonRow><ActionButton label="ทำต่อ" onPress={resume} /><ActionButton label="จบก่อนกำหนด" tone="danger" onPress={confirmFinish} /></ButtonRow>}
       {run.status === 'COMPLETED' && (
         <View style={styles.completeCard}>
           <Text style={styles.completeTitle}>Workout complete</Text>
@@ -154,7 +279,7 @@ export default function IntervalRunScreen() {
 
 const styles = StyleSheet.create({
   metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  completeCard: { gap: 12, borderRadius: 18, backgroundColor: '#123127', padding: 18 },
-  completeTitle: { color: '#A7F3D0', fontSize: 22, fontWeight: '900' },
-  completeText: { color: '#D1FAE5', fontSize: 16 },
+  completeCard: { gap: 12, borderRadius: 18, backgroundColor: '#DFF0FF', padding: 18 },
+  completeTitle: { color: '#145DA0', fontSize: 22, fontWeight: '900' },
+  completeText: { color: '#486581', fontSize: 16 },
 });
