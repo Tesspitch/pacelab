@@ -64,9 +64,11 @@ export const defaultGpsTrackerConfig: GpsTrackerConfig = {
   maximumHorizontalAccuracyM: 50,
   maximumGapMs: 30_000,
   maximumRunningSpeedMps: 12,
-  minimumPaceWindowMs: 5_000,
-  minimumPaceWindowDistanceM: 15,
-  paceWindowMs: 30_000,
+  // Keep the live pace responsive while still requiring enough movement to
+  // avoid displaying noise from a stationary GPS fix.
+  minimumPaceWindowMs: 3_000,
+  minimumPaceWindowDistanceM: 5,
+  paceWindowMs: 10_000,
 };
 
 export function createGpsTrackerState(

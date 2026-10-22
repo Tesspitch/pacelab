@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { ActionButton, BodyText, ButtonRow, Eyebrow, Metric, RunScreen, ScreenTitle } from '@/components/run-ui';
@@ -11,6 +12,8 @@ import type { WorkoutDefinition } from '@pacelab/domain';
 const kindLabel = { WARMUP: 'วอร์มอัพ', WORK: 'วิ่ง', RECOVERY: 'พัก', COOLDOWN: 'คูลดาวน์' } as const;
 
 export default function WorkoutPreviewScreen() {
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const params = useLocalSearchParams<{ workout?: string; draft?: string }>();
   const isDraft = params.draft === '1';
   let workout = sampleWorkout;
@@ -21,6 +24,26 @@ export default function WorkoutPreviewScreen() {
   const workCount = timeline.filter((step) => step.kind === 'WORK').length;
   const recoveryCount = timeline.filter((step) => step.kind === 'RECOVERY').length;
   const plannedDuration = workout === sampleWorkout ? samplePlannedDurationMs : timeline.every((step) => step.goal.type === 'TIME') ? timeline.reduce((sum, step) => sum + (step.goal.type === 'TIME' ? step.goal.durationMs : 0), 0) : null;
+  const savePreset = async () => {
+    setSaving(true);
+    setSaveMessage(null);
+    try {
+      const result = await saveCustomWorkout(workout);
+      if (result.cloudError) {
+        setSaveMessage(`บันทึกในเครื่องแล้ว แต่บันทึก Cloud ไม่สำเร็จ: ${result.cloudError}`);
+        return;
+      }
+      if (result.destination === 'local') {
+        setSaveMessage('บันทึกในเครื่องแล้ว · เข้าสู่ระบบเพื่อบันทึกลง Cloud');
+        return;
+      }
+      router.replace('/run-start');
+    } catch (error) {
+      setSaveMessage(`บันทึก preset ไม่สำเร็จ: ${error instanceof Error ? error.message : 'กรุณาลองอีกครั้ง'}`);
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
     <RunScreen>
       <Eyebrow>ตรวจแผนก่อนเริ่ม</Eyebrow>
@@ -47,8 +70,9 @@ export default function WorkoutPreviewScreen() {
           ))}
         </View>
       </View>
+      {saveMessage && <BodyText>{saveMessage}</BodyText>}
       {isDraft ? <ButtonRow>
-        <ActionButton label="บันทึก preset" tone="secondary" onPress={() => void saveCustomWorkout(workout).then(() => router.replace('/run-start'))} />
+        <ActionButton label={saving ? 'กำลังบันทึก…' : 'บันทึก preset'} tone="secondary" disabled={saving} onPress={() => void savePreset()} />
         <ActionButton label="เริ่มวิ่งเลย" onPress={() => router.push({ pathname: '/interval-run', params: { workout: JSON.stringify(workout) } })} />
       </ButtonRow> : <ActionButton label="เริ่มวิ่ง" onPress={() => router.push({ pathname: '/interval-run', params: { workout: JSON.stringify(workout) } })} />}
     </RunScreen>
@@ -57,14 +81,14 @@ export default function WorkoutPreviewScreen() {
 
 const styles = StyleSheet.create({
   metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  timeline: { gap: 10, borderRadius: 0, backgroundColor: '#FFFFFF', borderColor: '#E5E9EE', borderWidth: 1, padding: 18, overflow: 'hidden', shadowColor: '#263547', shadowOpacity: 0.05, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 1 },
-  chartTitle: { color: '#191D23', fontSize: 18, fontWeight: '900', marginBottom: 4 },
+  timeline: { gap: 10, borderRadius: 20, backgroundColor: '#FFFFFF', borderColor: '#E5E9EE', borderWidth: 1, padding: 18, overflow: 'hidden', shadowColor: '#263547', shadowOpacity: 0.05, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 1 },
+  chartTitle: { color: '#191D23', fontSize: 18, fontWeight: '700', marginBottom: 4 },
   horizontalChart: { flexDirection: 'row', height: 58, overflow: 'hidden', gap: 2, alignItems: 'flex-end' },
   horizontalBar: { minWidth: 7, alignItems: 'center', justifyContent: 'center' },
   workHeight: { height: 58 },
   recoveryHeight: { height: 30 },
   otherHeight: { height: 42 },
-  horizontalBarText: { color: '#191D23', fontSize: 10, fontWeight: '900' },
+  horizontalBarText: { color: '#191D23', fontSize: 10, fontWeight: '700' },
   chartLegend: { color: '#788493', fontSize: 11, lineHeight: 16 },
   detailList: { gap: 6, marginTop: 6 },
   detailRow: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 8, borderBottomColor: '#E8EDF1', borderBottomWidth: 1 },
@@ -74,7 +98,7 @@ const styles = StyleSheet.create({
   otherMarker: { backgroundColor: '#99A5B1' },
   detailIndex: { width: 52, color: '#788493', fontSize: 12, fontWeight: '800' },
   detailKind: { flex: 1, color: '#303945', fontSize: 14, fontWeight: '800' },
-  detailGoal: { color: '#299F92', fontSize: 13, fontWeight: '900' },
+  detailGoal: { color: '#299F92', fontSize: 13, fontWeight: '700' },
   workBar: { backgroundColor: '#EF8B7B' },
   recoveryBar: { backgroundColor: '#43C7B5' },
   otherBar: { backgroundColor: '#CBD3DB' },

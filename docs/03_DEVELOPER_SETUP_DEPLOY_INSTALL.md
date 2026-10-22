@@ -323,6 +323,13 @@ This section extends—not replaces—the setup/build/deploy instructions above.
 
 **Deployment check:** Supabase migrations and RLS must be applied before shipping an APK that attempts to upload `session_auto_laps` or `personal_records`. Share website should include kilometer splits/records only if the user opts into exposing them; private records are not automatically public.
 
+## Release 1.0.1: account deletion and authentication checklist
+
+- The Android build uses the `pacelab://auth/callback` deep link for native Google sign-in. Add that exact URI to **Supabase Dashboard → Authentication → URL Configuration → Redirect URLs** before testing a release APK.
+- Before deleting an account, PaceLab presents two destructive confirmations. Confirming it invokes the protected `delete-account` Edge Function, which deletes the authenticated `auth.users` record. Existing foreign-key cascades remove the account's cloud profile, activities, GPS points, laps, PBs, presets, shares and snapshots.
+- After cloud deletion succeeds, the app removes queued sync records, locally stored activities/GPS/routes and local preferences. The SQLite schema itself remains so a clean account can use the app again.
+- The `delete-account` function and hardened `share-activity` function must be deployed to the same Supabase project as the app environment before release.
+
 
 ---
 

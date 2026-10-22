@@ -1,6 +1,6 @@
 const { withAppBuildGradle } = require('expo/config-plugins');
 
-const CMAKE_PATH_LIMIT = '-DCMAKE_OBJECT_PATH_MAX=120';
+const CMAKE_PATH_LIMIT = '-DCMAKE_OBJECT_PATH_MAX=128';
 
 module.exports = function withWindowsCmakeObjectPathLimit(config) {
   if (process.platform !== 'win32') {

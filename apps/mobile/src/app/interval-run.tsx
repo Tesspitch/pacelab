@@ -92,7 +92,7 @@ export default function IntervalRunScreen() {
       backgroundRunning.current = true;
       pollingTimer.current = setInterval(() => {
         void getSessionGpsTracker(id).then(applyGpsState);
-      }, 1000);
+      }, 500);
       return;
     }
     foregroundSubscription.current = await startForegroundLocationTracking(
@@ -280,6 +280,6 @@ export default function IntervalRunScreen() {
 const styles = StyleSheet.create({
   metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   completeCard: { gap: 12, borderRadius: 18, backgroundColor: '#DFF0FF', padding: 18 },
-  completeTitle: { color: '#145DA0', fontSize: 22, fontWeight: '900' },
+  completeTitle: { color: '#145DA0', fontSize: 22, fontWeight: '700' },
   completeText: { color: '#486581', fontSize: 16 },
 });

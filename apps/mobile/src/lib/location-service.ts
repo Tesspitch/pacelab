@@ -58,8 +58,8 @@ export async function startForegroundLocationTracking(
   const subscription = await Location.watchPositionAsync(
     {
       accuracy: Location.Accuracy.BestForNavigation,
-      timeInterval: 1000,
-      distanceInterval: 2,
+      timeInterval: 500,
+      distanceInterval: 1,
       mayShowUserSettingsDialog: true,
     },
     (location) => {
@@ -85,10 +85,10 @@ export async function startBackgroundLocationTracking(sessionId: string): Promis
   if (await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK)) return;
   await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
     accuracy: Location.Accuracy.BestForNavigation,
-    timeInterval: 1000,
-    distanceInterval: 2,
-    deferredUpdatesDistance: 10,
-    deferredUpdatesInterval: 5000,
+    timeInterval: 500,
+    distanceInterval: 1,
+    deferredUpdatesDistance: 2,
+    deferredUpdatesInterval: 1000,
     activityType: Location.ActivityType.Fitness,
     pausesUpdatesAutomatically: false,
     showsBackgroundLocationIndicator: true,

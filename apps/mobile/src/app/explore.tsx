@@ -1,180 +1,209 @@
-import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
-import { Platform, Pressable, ScrollView, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { ExternalLink } from '@/components/external-link';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Collapsible } from '@/components/ui/collapsible';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { ActionButton, Eyebrow, RunScreen, ScreenTitle } from '@/components/run-ui';
 
-export default function TabTwoScreen() {
-  const safeAreaInsets = useSafeAreaInsets();
-  const insets = {
-    ...safeAreaInsets,
-    bottom: safeAreaInsets.bottom + BottomTabInset + Spacing.three,
-  };
-  const theme = useTheme();
+const activities = [
+  { title: 'Free Run', detail: 'วิ่งตามจังหวะของคุณ พร้อมปรับความเร็วแบบอิสระ', accent: '#43C7B5' },
+  { title: 'Interval Builder', detail: 'ออกแบบช่วงวิ่ง-พักให้เหมาะกับเป้าหมายและความฟิต', accent: '#1E6F73' },
+  { title: 'Recovery Insight', detail: 'บันทึกการฟื้นตัวและติดตามความคงที่ของการฝึก', accent: '#8AB39D' },
+];
 
-  const contentPlatformStyle = Platform.select({
-    android: {
-      paddingTop: insets.top,
-      paddingLeft: insets.left,
-      paddingRight: insets.right,
-      paddingBottom: insets.bottom,
-    },
-    web: {
-      paddingTop: Spacing.six,
-      paddingBottom: Spacing.four,
-    },
-  });
+const stats = [
+  { label: 'สัปดาห์นี้', value: '4' },
+  { label: 'ระยะทาง', value: '16.8 KM' },
+  { label: 'pace เฉลี่ย', value: '5:12' },
+];
 
+export default function ExploreScreen() {
   return (
-    <ScrollView
-      style={[styles.scrollView, { backgroundColor: theme.background }]}
-      contentInset={insets}
-      contentContainerStyle={[styles.contentContainer, contentPlatformStyle]}>
-      <ThemedView style={styles.container}>
-        <ThemedView style={styles.titleContainer}>
-          <ThemedText type="subtitle">Explore</ThemedText>
-          <ThemedText style={styles.centerText} themeColor="textSecondary">
-            This starter app includes example{'\n'}code to help you get started.
-          </ThemedText>
+    <RunScreen>
+      <Eyebrow>paceLab</Eyebrow>
+      <ScreenTitle>สำรวจการฝึก</ScreenTitle>
 
-          <ExternalLink href="https://docs.expo.dev" asChild>
-            <Pressable style={({ pressed }) => pressed && styles.pressed}>
-              <ThemedView type="backgroundElement" style={styles.linkButton}>
-                <ThemedText type="link">Expo documentation</ThemedText>
-                <SymbolView
-                  tintColor={theme.text}
-                  name={{ ios: 'arrow.up.right.square', android: 'link', web: 'link' }}
-                  size={12}
-                />
-              </ThemedView>
-            </Pressable>
-          </ExternalLink>
-        </ThemedView>
+      <View style={styles.heroCard}>
+        <Text style={styles.heroKicker}>TRAIN SMARTER</Text>
+        <Text style={styles.heroTitle}>ทุกเซสชัน คิดเพื่อผลลัพธ์</Text>
+        <Text style={styles.heroBody}>สร้างความคงที่ของการวิ่ง ด้วยแผนที่ชัดเจน สอดคล้องกับสภาพร่างกายและเป้าหมายของคุณ</Text>
+        <ActionButton label="เริ่มวันใหม่" onPress={() => router.push('/run-start')} />
+      </View>
 
-        <ThemedView style={styles.sectionsWrapper}>
-          <Collapsible title="File-based routing">
-            <ThemedText type="small">
-              This app has two screens: <ThemedText type="code">src/app/index.tsx</ThemedText> and{' '}
-              <ThemedText type="code">src/app/explore.tsx</ThemedText>
-            </ThemedText>
-            <ThemedText type="small">
-              The layout file in <ThemedText type="code">src/app/_layout.tsx</ThemedText> sets up
-              the tab navigator.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/router/introduction">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
+      <View style={styles.metricRow}>
+        {stats.map((item) => (
+          <View key={item.label} style={styles.metricCard}>
+            <Text style={styles.metricLabel}>{item.label}</Text>
+            <Text style={styles.metricValue}>{item.value}</Text>
+          </View>
+        ))}
+      </View>
 
-          <Collapsible title="Android, iOS, and web support">
-            <ThemedView type="backgroundElement" style={styles.collapsibleContent}>
-              <ThemedText type="small">
-                You can open this project on Android, iOS, and the web. To open the web version,
-                press <ThemedText type="smallBold">w</ThemedText> in the terminal running this
-                project.
-              </ThemedText>
-              <Image
-                source={require('@/assets/images/tutorial-web.png')}
-                style={styles.imageTutorial}
-              />
-            </ThemedView>
-          </Collapsible>
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>กิจกรรมที่แนะนำ</Text>
+        {activities.map((item) => (
+          <Pressable key={item.title} style={styles.listRow}>
+            <View style={[styles.dot, { backgroundColor: item.accent }]} />
+            <View style={styles.listTextWrap}>
+              <Text style={styles.listTitle}>{item.title}</Text>
+              <Text style={styles.listDetail}>{item.detail}</Text>
+            </View>
+          </Pressable>
+        ))}
+      </View>
 
-          <Collapsible title="Images">
-            <ThemedText type="small">
-              For static images, you can use the <ThemedText type="code">@2x</ThemedText> and{' '}
-              <ThemedText type="code">@3x</ThemedText> suffixes to provide files for different
-              screen densities.
-            </ThemedText>
-            <Image source={require('@/assets/images/react-logo.png')} style={styles.imageReact} />
-            <ExternalLink href="https://reactnative.dev/docs/images">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
-
-          <Collapsible title="Light and dark mode components">
-            <ThemedText type="small">
-              This template has light and dark mode support. The{' '}
-              <ThemedText type="code">useColorScheme()</ThemedText> hook lets you inspect what the
-              user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
-
-          <Collapsible title="Animations">
-            <ThemedText type="small">
-              This template includes an example of an animated component. The{' '}
-              <ThemedText type="code">src/components/ui/collapsible.tsx</ThemedText> component uses
-              the powerful <ThemedText type="code">react-native-reanimated</ThemedText> library to
-              animate opening this hint.
-            </ThemedText>
-          </Collapsible>
-        </ThemedView>
-        {Platform.OS === 'web' && <WebBadge />}
-      </ThemedView>
-    </ScrollView>
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>การวางแผน</Text>
+        <View style={styles.scheduleRow}>
+          <View style={styles.scheduleLabelBox}>
+            <Text style={styles.scheduleLabel}>Mon</Text>
+          </View>
+          <View style={styles.scheduleLabelBox}>
+            <Text style={styles.scheduleLabel}>Tue</Text>
+          </View>
+          <View style={styles.scheduleLabelBoxActive}>
+            <Text style={styles.scheduleLabelActive}>Wed</Text>
+          </View>
+          <View style={styles.scheduleLabelBox}>
+            <Text style={styles.scheduleLabel}>Thu</Text>
+          </View>
+        </View>
+        <Text style={styles.scheduleText}>วันพุธ · Session 3 · Interval + 15 นาที recovery walk</Text>
+      </View>
+    </RunScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollView: {
+  heroCard: {
+    gap: 12,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E9EE',
+    borderWidth: 1,
+    borderRadius: 28,
+    padding: 22,
+    shadowColor: '#233242',
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
+  },
+  heroKicker: {
+    color: '#2AA69D',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.6,
+  },
+  heroTitle: {
+    color: '#191D23',
+    fontSize: 30,
+    fontWeight: '700',
+    letterSpacing: -0.8,
+  },
+  heroBody: {
+    color: '#667282',
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  metricRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  metricCard: {
     flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E9EE',
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 16,
+    gap: 6,
   },
-  contentContainer: {
+  metricLabel: {
+    color: '#697584',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  metricValue: {
+    color: '#191D23',
+    fontSize: 24,
+    fontWeight: '700',
+  },
+  sectionCard: {
+    gap: 14,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E9EE',
+    borderWidth: 1,
+    borderRadius: 24,
+    padding: 20,
+  },
+  sectionTitle: {
+    color: '#191D23',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  listRow: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    paddingVertical: 8,
+  },
+  dot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginTop: 8,
+  },
+  listTextWrap: {
+    flex: 1,
+    gap: 4,
+  },
+  listTitle: {
+    color: '#191D23',
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  listDetail: {
+    color: '#667282',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  scheduleRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  scheduleLabelBox: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: 14,
+    backgroundColor: '#F5F7FA',
+    borderColor: '#E2E8EE',
+    borderWidth: 1,
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  container: {
-    maxWidth: MaxContentWidth,
-    flexGrow: 1,
+  scheduleLabel: {
+    color: '#58687B',
+    fontSize: 14,
+    fontWeight: '600',
   },
-  titleContainer: {
-    gap: Spacing.three,
+  scheduleLabelBoxActive: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: 14,
+    backgroundColor: '#E7F9F6',
+    borderColor: '#43C7B5',
+    borderWidth: 1,
     alignItems: 'center',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.six,
-  },
-  centerText: {
-    textAlign: 'center',
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-  linkButton: {
-    flexDirection: 'row',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.five,
     justifyContent: 'center',
-    gap: Spacing.one,
-    alignItems: 'center',
   },
-  sectionsWrapper: {
-    gap: Spacing.five,
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.three,
+  scheduleLabelActive: {
+    color: '#0B6A62',
+    fontSize: 14,
+    fontWeight: '800',
   },
-  collapsibleContent: {
-    alignItems: 'center',
-  },
-  imageTutorial: {
-    width: '100%',
-    aspectRatio: 296 / 171,
-    borderRadius: Spacing.three,
-    marginTop: Spacing.two,
-  },
-  imageReact: {
-    width: 100,
-    height: 100,
-    alignSelf: 'center',
+  scheduleText: {
+    color: '#667282',
+    fontSize: 14,
+    lineHeight: 20,
   },
 });

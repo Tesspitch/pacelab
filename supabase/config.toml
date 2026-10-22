@@ -1,0 +1,2 @@
+[functions.share-activity]
+verify_jwt = false

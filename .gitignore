@@ -6,3 +6,6 @@ coverage/
 .env.*
 !.env.example
 *.log
+apps/mobile/android/keystore.properties
+apps/mobile/android/app/pacelab-release.keystore
+supabase/.temp/*
